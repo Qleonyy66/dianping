@@ -56,6 +56,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         String code = RandomUtil.randomNumbers(6);
 
         // 4.保存验证码到 session
+       // session.setAttribute("code",code);
         stringRedisTemplate.opsForValue().set(LOGIN_CODE_KEY + phone, code, LOGIN_CODE_TTL, TimeUnit.MINUTES);
 
         // 5.发送验证码
@@ -72,8 +73,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
             // 2.如果不符合，返回错误信息
             return Result.fail("手机号格式错误！");
         }
+        //从session获得code
+        Object cacheCode = session.getAttribute("code");
         // 3.从redis获取验证码并校验
-        String cacheCode = stringRedisTemplate.opsForValue().get(LOGIN_CODE_KEY + phone);
+       // String cacheCode = stringRedisTemplate.opsForValue().get(LOGIN_CODE_KEY + phone);
         String code = loginForm.getCode();
         if (cacheCode == null || !cacheCode.equals(code)) {
             // 不一致，报错
@@ -88,7 +91,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
             // 6.不存在，创建新用户并保存
             user = createUserWithPhone(phone);
         }
-
+//        //7.保存用户到session
+//        session.setAttribute("user",user);
         // 7.保存用户信息到 redis中
         // 7.1.随机生成token，作为登录令牌
         String token = UUID.randomUUID().toString(true);
