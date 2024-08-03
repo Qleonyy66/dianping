@@ -74,9 +74,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
             return Result.fail("手机号格式错误！");
         }
         //从session获得code
-        Object cacheCode = session.getAttribute("code");
+       // Object cacheCode = session.getAttribute("code");
         // 3.从redis获取验证码并校验
-       // String cacheCode = stringRedisTemplate.opsForValue().get(LOGIN_CODE_KEY + phone);
+       String cacheCode = stringRedisTemplate.opsForValue().get(LOGIN_CODE_KEY + phone);
         String code = loginForm.getCode();
         if (cacheCode == null || !cacheCode.equals(code)) {
             // 不一致，报错
