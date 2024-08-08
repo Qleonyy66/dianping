@@ -3,6 +3,7 @@ package com.hmdp.service.impl;
 import cn.hutool.core.bean.BeanUtil;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.hmdp.dto.Result;
+import com.hmdp.entity.SeckillVoucher;
 import com.hmdp.entity.VoucherOrder;
 import com.hmdp.mapper.VoucherOrderMapper;
 import com.hmdp.service.ISeckillVoucherService;
@@ -17,10 +18,12 @@ import org.springframework.data.redis.connection.stream.*;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.Resource;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -39,11 +42,11 @@ import java.util.concurrent.Executors;
 @Service
 public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, VoucherOrder> implements IVoucherOrderService {
 
-   // @Resource
-   // private ISeckillVoucherService seckillVoucherService;
+    @Resource
+    private ISeckillVoucherService seckillVoucherService;
 
-//    @Resource
-//    private RedisIdWorker redisIdWorker;
+    @Resource
+    private RedisIdWorker redisIdWorker;
 //    @Resource
 //    private RedissonClient redissonClient;
     @Resource
@@ -126,8 +129,35 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         }
 
     @Override
+    @Transactional
     public Result seckillVoucher(Long voucherId) {
-        return null;
+        SeckillVoucher voucher = seckillVoucherService.getById(voucherId);
+        if(voucher.getBeginTime().isAfter(LocalDateTime.now()))
+        {
+            return Result.fail("秒杀未开始");
+
+        }
+        if(voucher.getEndTime().isBefore(LocalDateTime.now()))
+        {
+            return Result.fail("秒杀已结束");
+        }
+        if(voucher.getStock()<0)
+        {
+            return  Result.fail("库存不足");
+        }
+        boolean success = seckillVoucherService.update().setSql("stock = stock - 1").eq("voucher_id",voucherId).update();
+        if(!success)
+        {
+            return Result.fail("购买失败");
+        }
+        VoucherOrder voucherOrder = new VoucherOrder();
+        long orderId = redisIdWorker.nextId("order");
+        voucherOrder.setId(orderId);
+        Long userId = UserHolder.getUser().getId();
+        voucherOrder.setUserId(userId);
+        voucherOrder.setVoucherId(voucherId);
+        save(voucherOrder);
+        return Result.ok(voucherOrder);
     }
 }
 
