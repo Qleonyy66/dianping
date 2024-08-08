@@ -1,5 +1,6 @@
 package com.hmdp.service.impl;
 
+import cn.hutool.core.util.BooleanUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -56,7 +57,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         {
             return Result.fail("店铺不存在");
         }
-        stringRedisTemplate.opsForValue().set(CACHE_SHOP_KEY+id,JSONUtil.toJsonStr(shop));
+        stringRedisTemplate.opsForValue().set(CACHE_SHOP_KEY+id,JSONUtil.toJsonStr(shop),CACHE_SHOP_TTL,TimeUnit.MINUTES);
 
         return Result.ok(shop);
         // 解决缓存穿透
@@ -90,6 +91,67 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         // 2.删除缓存
         stringRedisTemplate.delete(CACHE_SHOP_KEY + id);
         return Result.ok();
+    }
+
+    private boolean trylock(String key)
+    {
+        Boolean flag = stringRedisTemplate.opsForValue().setIfAbsent(key,"1",10,TimeUnit.SECONDS);
+        return BooleanUtil.isTrue(flag);
+    }
+    private void unlock(String key)
+    {
+        stringRedisTemplate.delete(key);
+    }
+    public Shop queryByMutex(Long id)
+    {
+        String shopJson = stringRedisTemplate.opsForValue().get(CACHE_SHOP_KEY+id);
+        if(StrUtil.isNotBlank(shopJson))
+        {
+            Shop shop = JSONUtil.toBean(shopJson,Shop.class);
+            return shop;
+        }
+        //实现缓存重建
+        //首先获取互斥锁
+        String key = LOCK_SHOP_KEY +id;
+        try {
+            boolean isLock = trylock(key);
+            if(!isLock)
+            {
+                Thread.sleep(50);
+                return queryByMutex(id);
+            }
+            Shop shop = getById(id);
+            Thread.sleep(200);//模拟延迟
+            if(shop==null)
+            {
+                return null;
+            }
+            stringRedisTemplate.opsForValue().set(CACHE_SHOP_KEY+id,JSONUtil.toJsonStr(shop),CACHE_SHOP_TTL,TimeUnit.MINUTES);
+
+        }catch (Exception e)
+        {
+            e.printStackTrace();
+        }finally {
+            unlock(key);
+        }
+        return null;
+    }
+    public Shop queryByPassThrough(Long id)
+    {
+        String shopJson = stringRedisTemplate.opsForValue().get(CACHE_SHOP_KEY+id);
+        if(StrUtil.isNotBlank(shopJson))
+        {
+            Shop shop = JSONUtil.toBean(shopJson,Shop.class);
+            return shop;
+        }
+        Shop shop = getById(id);
+        if(shop==null)
+        {
+            return null;
+        }
+        stringRedisTemplate.opsForValue().set(CACHE_SHOP_KEY+id,JSONUtil.toJsonStr(shop),CACHE_SHOP_TTL,TimeUnit.MINUTES);
+
+        return null;
     }
 
     @Override
