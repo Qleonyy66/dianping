@@ -9,6 +9,7 @@ import com.hmdp.mapper.VoucherOrderMapper;
 import com.hmdp.service.ISeckillVoucherService;
 import com.hmdp.service.IVoucherOrderService;
 import com.hmdp.utils.RedisIdWorker;
+import com.hmdp.utils.SimpleRedisLock;
 import com.hmdp.utils.UserHolder;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RLock;
@@ -24,6 +25,7 @@ import sun.awt.AppContext;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.Resource;
+import javax.xml.crypto.dsig.SignatureMethod;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Collections;
@@ -302,11 +304,21 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         }
 
         Long userId = UserHolder.getUser().getId();
-        synchronized (userId.toString().intern())
+        SimpleRedisLock simpleRedisLock = new SimpleRedisLock("order"+userId,stringRedisTemplate);
+        boolean islock = simpleRedisLock.tryLock(1200);
+        if(!islock)
         {
+            return Result.fail("不允许重复下单");
+        }
+        try {
             IVoucherOrderService proxy = (IVoucherOrderService) AopContext.currentProxy();
             return proxy.createVoucherOrder(voucherId);
         }
+        finally {
+            simpleRedisLock.unlock();
+        }
+
+
 
     }
 
