@@ -145,7 +145,13 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         {
             return  Result.fail("库存不足");
         }
-        boolean success = seckillVoucherService.update().setSql("stock = stock - 1").eq("voucher_id",voucherId).update();
+        Long userId = UserHolder.getUser().getId();
+        int count = query().eq("user_id",userId).eq("voucher_id",voucherId).count();
+        if(count>0)
+        {
+            return  Result.fail("请勿重复购买");
+        }
+        boolean success = seckillVoucherService.update().setSql("stock = stock - 1").eq("voucher_id",voucherId).gt("voucher_id",0).update();
         if(!success)
         {
             return Result.fail("购买失败");
